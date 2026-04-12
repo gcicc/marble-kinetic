@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Kinetic">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>Kinetic — Marble Machine</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.20.0/matter.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400&family=Inter:wght@300;400;500&display=swap');
+:root {
+  --bg:#1a1510; --bg2:#221c14; --bg3:#2a2218;
+  --brass:#c4a050; --copper:#b87333; --steel:#8a9aaa;
+  --text:#d4c8b0; --text-dim:#8a7e6a;
+  --gold:#d4a843; --accent:#c4a050;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Inter',-apple-system,system-ui,sans-serif;background:var(--bg);color:var(--text);
+  min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;
+  user-select:none;-webkit-user-select:none;overflow:hidden;}
+canvas#gameCanvas{display:block;width:100%;flex:1;touch-action:none;}
+
+/* TOP BAR */
+.top-bar{display:flex;align-items:center;justify-content:space-between;
+  padding:calc(8px + env(safe-area-inset-top)) 12px 6px;background:var(--bg2);
+  border-bottom:1px solid rgba(196,160,80,0.1);flex-shrink:0;}
+.app-title{font-family:'Cormorant Garamond',serif;font-size:18px;font-weight:300;
+  letter-spacing:3px;color:var(--brass);text-transform:uppercase;}
+.mode-tabs{display:flex;gap:0;}
+.mode-tab{background:none;border:none;color:var(--text-dim);padding:5px 10px;
+  font-size:9px;font-weight:500;letter-spacing:1.2px;text-transform:uppercase;
+  cursor:pointer;transition:all 0.3s;position:relative;}
+.mode-tab.active{color:var(--brass);}
+.mode-tab.active::after{content:'';position:absolute;bottom:0;left:10%;right:10%;
+  height:1.5px;background:var(--brass);}
+
+/* BOTTOM BAR */
+.bottom-bar{background:var(--bg2);border-top:1px solid rgba(196,160,80,0.1);
+  padding:6px 10px calc(8px + env(safe-area-inset-bottom));flex-shrink:0;}
+
+/* PARTS TRAY */
+.parts-tray{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:4px 0;align-items:center;}
+.parts-tray::-webkit-scrollbar{display:none;}
+.part-btn{flex:0 0 auto;background:var(--bg3);border:1px solid rgba(196,160,80,0.12);
+  color:var(--text-dim);padding:6px 10px;border-radius:8px;font-size:10px;
+  cursor:pointer;transition:all 0.2s;display:flex;flex-direction:column;
+  align-items:center;gap:2px;min-width:52px;}
+.part-btn.active{color:var(--brass);border-color:rgba(196,160,80,0.4);
+  background:rgba(196,160,80,0.08);}
+.part-btn .part-icon{font-size:18px;}
+.part-btn .part-label{font-size:7px;letter-spacing:0.5px;text-transform:uppercase;}
+
+/* ACTION BUTTONS */
+.action-row{display:flex;justify-content:center;gap:8px;margin-top:4px;}
+.act-btn{background:none;border:1px solid var(--brass);color:var(--brass);
+  padding:6px 16px;border-radius:14px;font-family:'Cormorant Garamond',serif;
+  font-size:13px;cursor:pointer;letter-spacing:1px;transition:all 0.2s;}
+.act-btn:active{transform:scale(0.95);}
+.act-btn.primary{background:rgba(196,160,80,0.15);}
+
+/* SHOWCASE SELECTOR */
+.showcase-row{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:4px 0;}
+.showcase-row::-webkit-scrollbar{display:none;}
+.show-btn{flex:0 0 auto;background:var(--bg3);border:1px solid rgba(196,160,80,0.1);
+  color:var(--text-dim);padding:8px 14px;border-radius:10px;font-size:10px;
+  cursor:pointer;transition:all 0.2s;text-align:center;}
+.show-btn.active{color:var(--brass);border-color:rgba(196,160,80,0.3);
+  background:rgba(196,160,80,0.06);}
+.show-btn .show-name{font-family:'Cormorant Garamond',serif;font-size:13px;font-style:italic;}
+.show-btn .show-desc{font-size:8px;color:var(--text-dim);margin-top:2px;}
+
+/* PUZZLE INFO */
+.puzzle-info{display:flex;align-items:center;justify-content:space-between;padding:4px 4px 0;}
+.puzzle-title{font-family:'Cormorant Garamond',serif;font-size:14px;color:var(--brass);font-style:italic;}
+.puzzle-obj{font-size:9px;color:var(--text-dim);}
+.puzzle-parts{font-size:9px;color:var(--copper);}
+.star-display{color:var(--gold);font-size:12px;letter-spacing:2px;}
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <span class="app-title">Kinetic</span>
+  <div class="mode-tabs">
+    <button class="mode-tab active" data-mode="watch">Watch</button>
+    <button class="mode-tab" data-mode="build">Build</button>
+    <button class="mode-tab" data-mode="puzzle">Puzzle</button>
+  </div>
+</div>
+
+<canvas id="gameCanvas"></canvas>
+
+<div class="bottom-bar" id="bottomBar">
+  <!-- WATCH mode -->
+  <div id="watchUI">
+    <div class="showcase-row" id="showcaseRow"></div>
+    <div class="action-row">
+      <button class="act-btn" id="btnReplay">Replay</button>
+      <button class="act-btn" id="btnSpeed">1x</button>
+    </div>
+  </div>
+  <!-- BUILD mode -->
+  <div id="buildUI" style="display:none">
+    <div class="parts-tray" id="partsTray"></div>
+    <div class="action-row">
+      <button class="act-btn" id="btnDrop">Drop Ball</button>
+      <button class="act-btn" id="btnClearBuild">Clear</button>
+      <button class="act-btn" id="btnUndo">Undo</button>
+    </div>
+  </div>
+  <!-- PUZZLE mode -->
+  <div id="puzzleUI" style="display:none">
+    <div class="puzzle-info">
+      <span class="puzzle-title" id="puzzleTitle"></span>
+      <span class="puzzle-parts" id="puzzleParts"></span>
+    </div>
+    <div class="puzzle-info">
+      <span class="puzzle-obj" id="puzzleObj"></span>
+      <span class="star-display" id="starDisplay"></span>
+    </div>
+    <div class="parts-tray" id="puzzlePartsTray"></div>
+    <div class="action-row">
+      <button class="act-btn primary" id="btnPuzzleDrop">Drop Ball</button>
+      <button class="act-btn" id="btnPuzzleReset">Reset</button>
+      <button class="act-btn" id="btnPuzzleNext">Next</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// MATTER.JS SETUP
+// ═══════════════════════════════════════════════════════
+const { Engine, Render, Runner, Bodies, Body, Composite, Events, Vector, Mouse, MouseConstraint } = Matter;
+
+const canvas = document.getElementById('gameCanvas');
+const W = window.innerWidth;
+const H = window.innerHeight - 100; // account for bars
+canvas.width = W * (window.devicePixelRatio||1);
+canvas.height = H * (window.devicePixelRatio||1);
+canvas.style.width = W + 'px';
+canvas.style.height = H + 'px';
+
+const engine = Engine.create({ gravity: { x:0, y:1.2 } });
+
+const render = Render.create({
+  canvas: canvas,
+  engine: engine,
+  options: {
+    width: W * (window.devicePixelRatio||1),
+    height: H * (window.devicePixelRatio||1),
+    wireframes: false,
+    background: '#1a1510',
+    pixelRatio: window.devicePixelRatio||1,
+  }
+});
+
+Render.run(render);
+const runner = Runner.create();
+Runner.run(runner, engine);
+
+// ═══════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════
+let gameMode = 'watch';
+let selectedPart = 'ramp';
+let placedParts = [];
+let balls = [];
+let currentShowcase = 0;
+let currentPuzzle = 0;
+let simSpeed = 1;
+
+// ═══════════════════════════════════════════════════════
+// COLORS & STYLE
+// ═══════════════════════════════════════════════════════
+const COLORS = {
+  wall: '#3a3228', wallStroke: '#4a4238',
+  ramp: '#8b6914', rampStroke: '#a07820',
+  bumper: '#b87333', bumperStroke: '#d08840',
+  funnel: '#6b7b3a', funnelStroke: '#7b8b4a',
+  spinner: '#8a9aaa', spinnerStroke: '#9aaabc',
+  ball: '#d4a843', ballStroke: '#e4b853',
+  target: '#4caf50', targetStroke: '#6bcf70',
+  platform: '#5a4a3a', platformStroke: '#6a5a4a',
+};
+
+// ═══════════════════════════════════════════════════════
+// AUDIO
+// ═══════════════════════════════════════════════════════
+let audioCtx = null;
+function initAudio() {
+  if(audioCtx) return;
+  audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+}
+
+function playBounce(intensity) {
+  if(!audioCtx) return;
+  const freq = 200 + Math.random()*400;
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type = 'sine';
+  o.frequency.value = freq;
+  g.gain.setValueAtTime(Math.min(0.1, intensity*0.02), audioCtx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime+0.15);
+  o.connect(g).connect(audioCtx.destination);
+  o.start(); o.stop(audioCtx.currentTime+0.15);
+}
+
+function playWin() {
+  if(!audioCtx) return;
+  [523,659,784].forEach((f,i) => {
+    setTimeout(() => {
+      const o=audioCtx.createOscillator(), g=audioCtx.createGain();
+      o.type='sine'; o.frequency.value=f;
+      g.gain.setValueAtTime(0.12,audioCtx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+0.4);
+      o.connect(g).connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime+0.4);
+    }, i*150);
+  });
+}
+
+// Collision sounds
+Events.on(engine, 'collisionStart', (e) => {
+  e.pairs.forEach(pair => {
+    const vel = Vector.magnitude(Vector.sub(pair.bodyA.velocity, pair.bodyB.velocity));
+    if(vel > 1.5) playBounce(vel);
+
+    // Check target hit
+    if(gameMode === 'puzzle') {
+      const labels = [pair.bodyA.label, pair.bodyB.label];
+      if(labels.includes('ball') && labels.includes('target')) {
+        puzzleWin();
+      }
+    }
+  });
+});
+
+// ═══════════════════════════════════════════════════════
+// PART FACTORY
+// ═══════════════════════════════════════════════════════
+function createWalls() {
+  const wallOpts = { isStatic:true, render:{fillStyle:COLORS.wall, strokeStyle:COLORS.wallStroke, lineWidth:1} };
+  return [
+    Bodies.rectangle(W/2, H+25, W+50, 50, wallOpts),  // floor
+    Bodies.rectangle(-25, H/2, 50, H+50, wallOpts),     // left
+    Bodies.rectangle(W+25, H/2, 50, H+50, wallOpts),    // right
+  ];
+}
+
+function createRamp(x, y, angle, len) {
+  len = len || 120;
+  return Bodies.rectangle(x, y, len, 8, {
+    isStatic:true, angle: angle,
+    render: { fillStyle:COLORS.ramp, strokeStyle:COLORS.rampStroke, lineWidth:1 },
+    label:'ramp', friction:0.3
+  });
+}
+
+function createBumper(x, y, r) {
+  r = r || 15;
+  return Bodies.circle(x, y, r, {
+    isStatic:true, restitution:1.2,
+    render: { fillStyle:COLORS.bumper, strokeStyle:COLORS.bumperStroke, lineWidth:2 },
+    label:'bumper'
+  });
+}
+
+function createPlatform(x, y, w) {
+  w = w || 80;
+  return Bodies.rectangle(x, y, w, 6, {
+    isStatic:true,
+    render: { fillStyle:COLORS.platform, strokeStyle:COLORS.platformStroke, lineWidth:1 },
+    label:'platform', friction:0.5
+  });
+}
+
+function createFunnel(x, y) {
+  const leftWall = Bodies.rectangle(x-30, y-15, 8, 50, {
+    isStatic:true, angle:-0.4,
+    render:{fillStyle:COLORS.funnel,strokeStyle:COLORS.funnelStroke,lineWidth:1},
+    label:'funnel'
+  });
+  const rightWall = Bodies.rectangle(x+30, y-15, 8, 50, {
+    isStatic:true, angle:0.4,
+    render:{fillStyle:COLORS.funnel,strokeStyle:COLORS.funnelStroke,lineWidth:1},
+    label:'funnel'
+  });
+  return [leftWall, rightWall];
+}
+
+function createSpinner(x, y) {
+  const bar = Bodies.rectangle(x, y, 80, 6, {
+    isStatic:false, density:0.01,
+    render:{fillStyle:COLORS.spinner,strokeStyle:COLORS.spinnerStroke,lineWidth:1},
+    label:'spinner'
+  });
+  const pin = Matter.Constraint.create({
+    pointA:{x,y}, bodyB:bar, pointB:{x:0,y:0}, stiffness:1, length:0,
+    render:{strokeStyle:'rgba(138,154,170,0.3)',lineWidth:1}
+  });
+  return { bodies:[bar], constraints:[pin] };
+}
+
+function createBall(x, y) {
+  const ball = Bodies.circle(x, y, 10, {
+    restitution: 0.6, friction: 0.05, density: 0.005,
+    render: { fillStyle:COLORS.ball, strokeStyle:COLORS.ballStroke, lineWidth:2 },
+    label: 'ball'
+  });
+  balls.push(ball);
+  return ball;
+}
+
+function createTarget(x, y) {
+  return Bodies.circle(x, y, 18, {
+    isStatic:true, isSensor:true,
+    render: { fillStyle:'rgba(76,175,80,0.3)', strokeStyle:COLORS.targetStroke, lineWidth:2 },
+    label: 'target'
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+// SHOWCASE MACHINES (Eye Candy)
+// ═══════════════════════════════════════════════════════
+const SHOWCASES = [
+  {
+    name:'The Cascade', desc:'Classic zigzag',
+    ballStart: [W/2, 20],
+    build: () => {
+      const parts = [];
+      for(let i=0; i<8; i++) {
+        const x = i%2===0 ? W*0.25 : W*0.75;
+        const y = 60 + i*65;
+        const angle = i%2===0 ? 0.2 : -0.2;
+        parts.push(createRamp(x, y, angle, 200));
+      }
+      // Bumpers
+      for(let i=0; i<6; i++) {
+        parts.push(createBumper(W*0.5 + Math.sin(i)*60, 80+i*90, 12));
+      }
+      return parts;
+    }
+  },
+  {
+    name:'Pinball Descent', desc:'Bumpers & ramps',
+    ballStart: [W/2, 15],
+    build: () => {
+      const parts = [];
+      // Top funnel
+      parts.push(...createFunnel(W/2, 50));
+      // Bumper grid
+      for(let row=0; row<5; row++) {
+        const cols = row%2===0 ? 4 : 3;
+        for(let col=0; col<cols; col++) {
+          const x = (col+1)*W/(cols+1) + (row%2===0?0:W/(cols+2)*0.5);
+          parts.push(createBumper(x, 100+row*70, 10+Math.random()*8));
+        }
+      }
+      // Bottom ramps
+      parts.push(createRamp(W*0.3, H-120, -0.25, 150));
+      parts.push(createRamp(W*0.7, H-60, 0.25, 150));
+      return parts;
+    }
+  },
+  {
+    name:'The Gauntlet', desc:'Spinners & funnels',
+    ballStart: [W/2, 15],
+    build: () => {
+      const parts = [];
+      const constraints = [];
+      // Zigzag ramps with spinners
+      for(let i=0; i<5; i++) {
+        const x = i%2===0 ? W*0.3 : W*0.7;
+        parts.push(createRamp(x, 60+i*100, i%2===0?0.15:-0.15, 160));
+        // Spinner at end of each ramp
+        const sx = i%2===0 ? W*0.65 : W*0.35;
+        const s = createSpinner(sx, 90+i*100);
+        parts.push(...s.bodies);
+        constraints.push(...s.constraints);
+      }
+      // Funnel at bottom
+      parts.push(...createFunnel(W/2, H-80));
+      return { parts, constraints };
+    }
+  },
+  {
+    name:'Gravity Well', desc:'Circular descent',
+    ballStart: [W/2+80, 30],
+    build: () => {
+      const parts = [];
+      const cx=W/2, cy=H/2;
+      // Concentric ring of platforms
+      for(let ring=0; ring<4; ring++) {
+        const r = 50 + ring*55;
+        const count = 6+ring*2;
+        for(let i=0; i<count; i++) {
+          const a = (Math.PI*2/count)*i + ring*0.3;
+          const x = cx + r*Math.cos(a);
+          const y = cy + r*Math.sin(a) - 30;
+          if(y > 10 && y < H-30) {
+            parts.push(createPlatform(x, y, 35+ring*5));
+          }
+        }
+      }
+      // Central bumpers
+      for(let i=0; i<3; i++) {
+        const a = (Math.PI*2/3)*i;
+        parts.push(createBumper(cx+25*Math.cos(a), cy-30+25*Math.sin(a), 8));
+      }
+      return parts;
+    }
+  },
+  {
+    name:'Steampunk Drop', desc:'Gears & channels',
+    ballStart: [W*0.2, 15],
+    build: () => {
+      const parts = [];
+      const constraints = [];
+      // Alternating ramps and spinners creating a clockwork feel
+      for(let i=0; i<7; i++) {
+        const x = (i%3===0) ? W*0.2 : (i%3===1) ? W*0.5 : W*0.8;
+        const y = 50 + i*70;
+        parts.push(createRamp(x, y, (i%2?0.18:-0.18), 100));
+        if(i%2===0) {
+          const s = createSpinner(x+(i%2?60:-60), y+20);
+          parts.push(...s.bodies);
+          constraints.push(...s.constraints);
+        } else {
+          parts.push(createBumper(x+(i%2?-50:50), y+10, 12));
+        }
+      }
+      parts.push(...createFunnel(W/2, H-100));
+      parts.push(createRamp(W/2, H-50, 0, 80));
+      return { parts, constraints };
+    }
+  }
+];
+
+// ═══════════════════════════════════════════════════════
+// PUZZLES
+// ═══════════════════════════════════════════════════════
+const PUZZLES = [
+  {
+    title: 'First Drop', objective: 'Guide the ball to the green target',
+    ballStart: [W/2, 30],
+    targetPos: [W/2, H-50],
+    fixedParts: [],
+    availableParts: [{type:'ramp',count:3},{type:'platform',count:2}],
+    stars: [1,2,3], // parts used thresholds for 3/2/1 stars
+  },
+  {
+    title: 'The Gap', objective: 'Bridge the gap to reach the target',
+    ballStart: [W*0.2, 30],
+    targetPos: [W*0.8, H-50],
+    fixedParts: [
+      {type:'ramp', x:W*0.2, y:100, angle:0.2, len:120},
+      {type:'ramp', x:W*0.8, y:300, angle:-0.2, len:120},
+    ],
+    availableParts: [{type:'ramp',count:2},{type:'bumper',count:2},{type:'platform',count:1}],
+    stars: [2,3,5],
+  },
+  {
+    title: 'Pinball Wizard', objective: 'Use bumpers to redirect the ball',
+    ballStart: [W*0.5, 20],
+    targetPos: [W*0.15, H-50],
+    fixedParts: [
+      {type:'ramp', x:W*0.5, y:80, angle:0, len:60},
+    ],
+    availableParts: [{type:'bumper',count:5},{type:'ramp',count:1}],
+    stars: [2,4,6],
+  },
+  {
+    title: 'The Funnel', objective: 'Catch and redirect through the funnel',
+    ballStart: [W*0.8, 20],
+    targetPos: [W*0.5, H-40],
+    fixedParts: [
+      {type:'ramp', x:W*0.7, y:100, angle:-0.3, len:140},
+    ],
+    availableParts: [{type:'funnel',count:2},{type:'ramp',count:2},{type:'platform',count:1}],
+    stars: [2,3,5],
+  },
+  {
+    title: 'Spinner Maze', objective: 'Navigate past the spinners',
+    ballStart: [W*0.5, 15],
+    targetPos: [W*0.5, H-40],
+    fixedParts: [
+      {type:'spinner', x:W*0.35, y:180},
+      {type:'spinner', x:W*0.65, y:350},
+    ],
+    availableParts: [{type:'ramp',count:4},{type:'bumper',count:2}],
+    stars: [3,4,6],
+  },
+];
+
+// ═══════════════════════════════════════════════════════
+// SCENE MANAGEMENT
+// ═══════════════════════════════════════════════════════
+function clearScene() {
+  Composite.clear(engine.world);
+  balls = [];
+  placedParts = [];
+  // Always add walls
+  Composite.add(engine.world, createWalls());
+}
+
+function loadShowcase(idx) {
+  clearScene();
+  currentShowcase = idx;
+  const show = SHOWCASES[idx];
+  const result = show.build();
+  if(result.parts) {
+    Composite.add(engine.world, result.parts);
+    if(result.constraints) result.constraints.forEach(c => Composite.add(engine.world, c));
+  } else {
+    Composite.add(engine.world, result);
+  }
+  // Drop ball
+  setTimeout(() => {
+    const ball = createBall(show.ballStart[0], show.ballStart[1]);
+    Composite.add(engine.world, ball);
+  }, 500);
+}
+
+function loadPuzzle(idx) {
+  clearScene();
+  currentPuzzle = idx;
+  const puz = PUZZLES[idx];
+
+  // Fixed parts
+  puz.fixedParts.forEach(fp => {
+    if(fp.type==='ramp') Composite.add(engine.world, createRamp(fp.x,fp.y,fp.angle,fp.len));
+    if(fp.type==='bumper') Composite.add(engine.world, createBumper(fp.x,fp.y));
+    if(fp.type==='platform') Composite.add(engine.world, createPlatform(fp.x,fp.y));
+    if(fp.type==='spinner') {
+      const s=createSpinner(fp.x,fp.y);
+      Composite.add(engine.world, s.bodies);
+      s.constraints.forEach(c=>Composite.add(engine.world,c));
+    }
+  });
+
+  // Target
+  Composite.add(engine.world, createTarget(puz.targetPos[0], puz.targetPos[1]));
+
+  // Update UI
+  document.getElementById('puzzleTitle').textContent = puz.title;
+  document.getElementById('puzzleObj').textContent = puz.objective;
+  renderPuzzleParts();
+  document.getElementById('starDisplay').textContent = '';
+}
+
+function puzzleWin() {
+  const puz = PUZZLES[currentPuzzle];
+  const used = placedParts.length;
+  let stars = 1;
+  if(used <= puz.stars[0]) stars = 3;
+  else if(used <= puz.stars[1]) stars = 2;
+
+  document.getElementById('starDisplay').textContent = '\u2605'.repeat(stars) + '\u2606'.repeat(3-stars);
+  playWin();
+}
+
+// ═══════════════════════════════════════════════════════
+// BUILD / PUZZLE PART PLACEMENT
+// ═══════════════════════════════════════════════════════
+const PART_TYPES = [
+  { id:'ramp', icon:'\u2571', label:'Ramp' },
+  { id:'platform', icon:'\u2500', label:'Platform' },
+  { id:'bumper', icon:'\u25CF', label:'Bumper' },
+  { id:'funnel', icon:'\u2228', label:'Funnel' },
+  { id:'spinner', icon:'\u21BB', label:'Spinner' },
+];
+
+function renderBuildParts() {
+  const tray = document.getElementById('partsTray');
+  tray.innerHTML = '';
+  PART_TYPES.forEach(pt => {
+    const btn = document.createElement('button');
+    btn.className = 'part-btn'+(pt.id===selectedPart?' active':'');
+    btn.innerHTML = `<span class="part-icon">${pt.icon}</span><span class="part-label">${pt.label}</span>`;
+    btn.addEventListener('click', () => { selectedPart=pt.id; renderBuildParts(); });
+    tray.appendChild(btn);
+  });
+}
+
+function renderPuzzleParts() {
+  const tray = document.getElementById('puzzlePartsTray');
+  const puz = PUZZLES[currentPuzzle];
+  tray.innerHTML = '';
+  let partsInfo = '';
+  puz.availableParts.forEach(ap => {
+    const pt = PART_TYPES.find(p=>p.id===ap.type);
+    const used = placedParts.filter(p=>p.partType===ap.type).length;
+    const remaining = ap.count - used;
+
+    const btn = document.createElement('button');
+    btn.className = 'part-btn'+(ap.type===selectedPart?' active':'')+(remaining<=0?' disabled':'');
+    btn.innerHTML = `<span class="part-icon">${pt.icon}</span><span class="part-label">${pt.label} (${remaining})</span>`;
+    if(remaining > 0) {
+      btn.addEventListener('click', () => { selectedPart=ap.type; renderPuzzleParts(); });
+    }
+    tray.appendChild(btn);
+    partsInfo += `${pt.label}:${remaining} `;
+  });
+  document.getElementById('puzzleParts').textContent = partsInfo.trim();
+}
+
+function placePart(x, y) {
+  let body, extra;
+
+  if(gameMode === 'puzzle') {
+    const puz = PUZZLES[currentPuzzle];
+    const ap = puz.availableParts.find(a=>a.type===selectedPart);
+    if(!ap) return;
+    const used = placedParts.filter(p=>p.partType===selectedPart).length;
+    if(used >= ap.count) return;
+  }
+
+  if(selectedPart==='ramp') {
+    body = createRamp(x, y, (x < W/2 ? 0.2 : -0.2), 120);
+  } else if(selectedPart==='platform') {
+    body = createPlatform(x, y, 80);
+  } else if(selectedPart==='bumper') {
+    body = createBumper(x, y, 15);
+  } else if(selectedPart==='funnel') {
+    const parts = createFunnel(x, y);
+    parts.forEach(p => Composite.add(engine.world, p));
+    placedParts.push({ partType:selectedPart, bodies:parts });
+    if(gameMode==='puzzle') renderPuzzleParts();
+    return;
+  } else if(selectedPart==='spinner') {
+    const s = createSpinner(x, y);
+    s.bodies.forEach(b => Composite.add(engine.world, b));
+    s.constraints.forEach(c => Composite.add(engine.world, c));
+    placedParts.push({ partType:selectedPart, bodies:s.bodies, constraints:s.constraints });
+    if(gameMode==='puzzle') renderPuzzleParts();
+    return;
+  }
+
+  if(body) {
+    Composite.add(engine.world, body);
+    placedParts.push({ partType:selectedPart, bodies:[body] });
+    if(gameMode==='puzzle') renderPuzzleParts();
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// CANVAS INTERACTION
+// ═══════════════════════════════════════════════════════
+canvas.addEventListener('click', (e) => {
+  initAudio();
+  if(audioCtx&&audioCtx.state==='suspended') audioCtx.resume();
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+
+  if(gameMode==='build' || gameMode==='puzzle') {
+    placePart(x, y);
+  }
+});
+
+// ═══════════════════════════════════════════════════════
+// SHOWCASE UI
+// ═══════════════════════════════════════════════════════
+function renderShowcases() {
+  const row = document.getElementById('showcaseRow');
+  row.innerHTML = '';
+  SHOWCASES.forEach((s, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'show-btn'+(i===currentShowcase?' active':'');
+    btn.innerHTML = `<div class="show-name">${s.name}</div><div class="show-desc">${s.desc}</div>`;
+    btn.addEventListener('click', () => { currentShowcase=i; loadShowcase(i); renderShowcases(); });
+    row.appendChild(btn);
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+// MODE SWITCHING
+// ═══════════════════════════════════════════════════════
+document.querySelectorAll('.mode-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.mode-tab').forEach(t=>t.classList.remove('active'));
+    tab.classList.add('active');
+    gameMode = tab.dataset.mode;
+
+    document.getElementById('watchUI').style.display = gameMode==='watch'?'':'none';
+    document.getElementById('buildUI').style.display = gameMode==='build'?'':'none';
+    document.getElementById('puzzleUI').style.display = gameMode==='puzzle'?'':'none';
+
+    if(gameMode==='watch') { loadShowcase(currentShowcase); renderShowcases(); }
+    if(gameMode==='build') { clearScene(); renderBuildParts(); }
+    if(gameMode==='puzzle') { loadPuzzle(currentPuzzle); }
+  });
+});
+
+// ═══════════════════════════════════════════════════════
+// ACTION BUTTONS
+// ═══════════════════════════════════════════════════════
+
+// Watch
+document.getElementById('btnReplay').addEventListener('click', () => {
+  // Remove old balls
+  balls.forEach(b => Composite.remove(engine.world, b));
+  balls = [];
+  const show = SHOWCASES[currentShowcase];
+  setTimeout(() => {
+    const ball = createBall(show.ballStart[0], show.ballStart[1]);
+    Composite.add(engine.world, ball);
+  }, 300);
+});
+
+document.getElementById('btnSpeed').addEventListener('click', () => {
+  const speeds = [0.5, 1, 1.5, 2];
+  const idx = (speeds.indexOf(simSpeed)+1)%speeds.length;
+  simSpeed = speeds[idx];
+  engine.timing.timeScale = simSpeed;
+  document.getElementById('btnSpeed').textContent = simSpeed+'x';
+});
+
+// Build
+document.getElementById('btnDrop').addEventListener('click', () => {
+  initAudio();
+  const ball = createBall(W/2, 20);
+  Composite.add(engine.world, ball);
+});
+
+document.getElementById('btnClearBuild').addEventListener('click', () => {
+  clearScene();
+  placedParts = [];
+});
+
+document.getElementById('btnUndo').addEventListener('click', () => {
+  const last = placedParts.pop();
+  if(last) {
+    last.bodies.forEach(b => Composite.remove(engine.world, b));
+    if(last.constraints) last.constraints.forEach(c => Composite.remove(engine.world, c));
+  }
+});
+
+// Puzzle
+document.getElementById('btnPuzzleDrop').addEventListener('click', () => {
+  initAudio();
+  // Remove old balls
+  balls.forEach(b => Composite.remove(engine.world, b));
+  balls = [];
+  const puz = PUZZLES[currentPuzzle];
+  const ball = createBall(puz.ballStart[0], puz.ballStart[1]);
+  Composite.add(engine.world, ball);
+});
+
+document.getElementById('btnPuzzleReset').addEventListener('click', () => {
+  placedParts = [];
+  loadPuzzle(currentPuzzle);
+});
+
+document.getElementById('btnPuzzleNext').addEventListener('click', () => {
+  currentPuzzle = (currentPuzzle+1) % PUZZLES.length;
+  placedParts = [];
+  loadPuzzle(currentPuzzle);
+});
+
+// ═══════════════════════════════════════════════════════
+// BALL CLEANUP — remove balls that fall off screen
+// ═══════════════════════════════════════════════════════
+Events.on(engine, 'afterUpdate', () => {
+  balls = balls.filter(b => {
+    if(b.position.y > H + 100) {
+      Composite.remove(engine.world, b);
+      return false;
+    }
+    return true;
+  });
+});
+
+// ═══════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════
+renderShowcases();
+loadShowcase(0);
+
+if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script>
+</body>
+</html>
