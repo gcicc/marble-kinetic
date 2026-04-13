@@ -79,9 +79,31 @@ canvas#gameCanvas{display:block;width:100%;flex:1;touch-action:none;}
 .puzzle-obj{font-size:9px;color:var(--text-dim);}
 .puzzle-parts{font-size:9px;color:var(--copper);}
 .star-display{color:var(--gold);font-size:12px;letter-spacing:2px;}
+.onboard-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:100;display:flex;align-items:center;justify-content:center;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);padding:20px;}
+.onboard-overlay.hidden{display:none;}
+.onboard{background:#221c14;border:1px solid rgba(196,160,80,0.15);border-radius:16px;padding:24px 20px;max-width:380px;width:100%;max-height:85vh;overflow-y:auto;}
+.onboard h2{font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:300;color:#c4a050;letter-spacing:2px;text-align:center;margin-bottom:12px;}
+.onboard p{font-size:12px;line-height:1.6;color:#d4c8b0;opacity:0.85;margin-bottom:10px;}
+.onboard .hl{color:#c4a050;}
+.onboard .step{display:flex;gap:10px;margin-bottom:10px;align-items:flex-start;}
+.onboard .step-num{background:#b87333;color:#1a1510;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;flex-shrink:0;}
+.onboard .step-text{font-size:12px;line-height:1.6;color:#d4c8b0;opacity:0.9;}
+.onboard .step-text strong{color:#c4a050;}
+.onboard .dismiss{display:block;margin:14px auto 0;background:rgba(196,160,80,0.1);border:1px solid rgba(196,160,80,0.3);color:#c4a050;padding:10px 32px;border-radius:12px;font-family:'Cormorant Garamond',serif;font-size:14px;cursor:pointer;letter-spacing:1px;}
 </style>
 </head>
 <body>
+
+<div class="onboard-overlay" id="onboard">
+  <div class="onboard">
+    <h2>Kinetic — Marble Machine</h2>
+    <div class="step"><div class="step-num">1</div><div class="step-text"><strong>Watch mode:</strong> Select a pre-built machine and watch the ball bounce through ramps, bumpers, and spinners. Tap Replay to drop again. Speed control (0.5x–2x).</div></div>
+    <div class="step"><div class="step-num">2</div><div class="step-text"><strong>Build mode:</strong> Tap the parts tray to select a piece (ramp, platform, bumper, funnel, spinner), then <strong>tap anywhere</strong> on the canvas to place it. Tap Drop Ball to test. Undo removes the last piece.</div></div>
+    <div class="step"><div class="step-num">3</div><div class="step-text"><strong>Puzzle mode:</strong> Guide the ball to the <strong style="color:#4caf50">green target</strong> using limited parts. Fewer parts = more stars. 5 levels of increasing difficulty.</div></div>
+    <p>All physics are real — gravity, friction, bouncing, and spinning are simulated with the Matter.js engine. Every collision makes a sound.</p>
+    <button class="dismiss" id="dismissOnboard">Let's Build</button>
+  </div>
+</div>
 
 <div class="top-bar">
   <span class="app-title">Kinetic</span>
@@ -780,6 +802,10 @@ Events.on(engine, 'afterUpdate', () => {
 // ═══════════════════════════════════════════════════════
 renderShowcases();
 loadShowcase(0);
+
+const onboard=document.getElementById('onboard');
+if(localStorage.getItem('kinetic-onboarded')) onboard.classList.add('hidden');
+document.getElementById('dismissOnboard').addEventListener('click',()=>{onboard.classList.add('hidden');localStorage.setItem('kinetic-onboarded','1');});
 
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
 </script>
